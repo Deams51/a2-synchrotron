@@ -47,8 +47,10 @@
 #include "node.h"
 #include "2pc.h"
 #include "3pc.h" /* for phases enum */
+#include "dev/uart1.h" /* for serial communication */
 
 #define AGREEMENT_WORD (0x7BC0FFEEuL)
+#define SERIAL_BUFFER_SIZE 512
 
 static uint32_t two_pc_value = 0;
 static uint32_t two_pc_agreement_value = 0;
@@ -57,7 +59,11 @@ static uint8_t* flags;
 static uint8_t complete = 0, phase = 0;
 static uint16_t off_slot;
 
+static unsigned char serial_buffer[SERIAL_BUFFER_SIZE];
+static uint8_t serial_buffer_idx = 0;
+
 static void round_begin(const uint16_t round_count, const uint8_t id);
+static void serial_rx_callback(unsigned char c);
 
 CHAOS_APP(chaos_drone_app, TWO_PC_SLOT_LEN, TWO_PC_ROUND_MAX_SLOTS, 1, two_pc_is_pending, round_begin);
 #if NETSTACK_CONF_WITH_CHAOS_NODE_DYNAMIC
@@ -73,6 +79,11 @@ AUTOSTART_PROCESSES(&chaos_drone_app_process);
 PROCESS_THREAD(chaos_drone_app_process, ev, data)
 {
   PROCESS_BEGIN();
+
+  /* Init serial communication */
+  uart1_init(BAUD2UBR(115200));
+  uart1_set_input(serial_rx_callback);
+
   two_pc_agreement_value = AGREEMENT_WORD;
   printf("{boot} Drone Test Application\n");
 
@@ -136,4 +147,18 @@ static void round_begin(const uint16_t round_count, const uint8_t id){
   off_slot = two_pc_get_off_slot();
   round_count_local = round_count;
   process_poll(&chaos_drone_app_process);
+}
+
+static void serial_rx_callback(unsigned char c){
+  unsigned int i;
+  if(c == '\0' || c == '\n') {
+    /* Do something with message */
+    serial_buffer_idx = 0;
+  } else if (serial_buffer_idx == SERIAL_BUFFER_SIZE) {
+    printf("Serial buffer overflow, resetting buffer!");
+    serial_buffer_idx = 0;
+  } else {
+    serial_buffer[serial_buffer_idx] = c;
+    serial_buffer_idx++;
+  }
 }
