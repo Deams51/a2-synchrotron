@@ -111,3 +111,7 @@ seriallog-*
 misc.xml
 modules.xml
 apps/chaos/unit-test/scripts/.idea
+
+# Clion
+cmake-build-debug
+.idea
