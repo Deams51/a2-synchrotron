@@ -85,6 +85,7 @@
 typedef struct __attribute__((packed)) {
   uint32_t value;
   uint8_t phase;
+  uint8_t error_codes[10]; // Reason for rejecting 2PC value
   uint8_t flags_and_votes[];
 } two_pc_t;
 
@@ -140,6 +141,8 @@ process(uint16_t round_count, uint16_t slot_count, chaos_state_t current_state, 
     got_valid_rx = 1;      //to enable retransmissions
     //vote for the proposal: set my vote
     votes[array_index] |= 1 << (array_offset);
+    //reset my error code
+    tx_two_pc->error_codes[chaos_node_index] = 0;
     agree = 1;
   } else if(current_state == CHAOS_RX && chaos_txrx_success) {
     if( !got_valid_rx ){
@@ -149,12 +152,15 @@ process(uint16_t round_count, uint16_t slot_count, chaos_state_t current_state, 
       if( tx_two_pc->value == rx_two_pc->value ){
         //vote for the proposal: set my vote
         agree = 1;
+        tx_two_pc->error_codes[chaos_node_index] = 0; //@todo remove, just here for debug
         votes[array_index] |= 1 << (array_offset);
       } else {
         //do not vote for proposal (= vote against it), but send the received value
         agree = 0; //Unnecessary
         votes[array_index] &= ~((uint8_t)1 << (array_offset));
         tx_two_pc->value = rx_two_pc->value;
+        // set my error code for refusal
+        tx_two_pc->error_codes[chaos_node_index] = 1; //@todo should get error and agreement value from serial
       }
     }
     got_valid_rx = 1;
@@ -178,6 +184,13 @@ process(uint16_t round_count, uint16_t slot_count, chaos_state_t current_state, 
         flag_sum += tx_flags[i];
         vote_sum += tx_votes[i];
         rx_flag_sum += rx_flags[i];
+      }
+
+      //merge error codes
+      for( i = 0; i < CHAOS_NODES; i++){
+        if(tx_two_pc->error_codes[i] == 0){
+          tx_two_pc->error_codes[i] = rx_two_pc->error_codes[i];
+        }
       }
 
       if( IS_INITIATOR() && tx_two_pc->phase == PHASE_PROPOSE && flag_sum == FLAG_SUM  ){
@@ -254,6 +267,7 @@ process(uint16_t round_count, uint16_t slot_count, chaos_state_t current_state, 
   int end = (slot_count >= TWO_PC_ROUND_MAX_SLOTS - 1) || (next_state == CHAOS_OFF);
   if(end){
     //memcpy(&two_pc_local,tx_two_pc, sizeof(two_pc_t) + two_pc_get_flags_length() + two_pc_get_votes_length());
+    memcpy(two_pc_local.two_pc.error_codes, tx_two_pc->error_codes, 10* sizeof(uint8_t));
     two_pc_local.two_pc.value = tx_two_pc->value;
     two_pc_local.two_pc.phase = tx_two_pc->phase;
     tx_flags_final = tx_two_pc->flags_and_votes;
@@ -292,7 +306,7 @@ uint16_t two_pc_get_off_slot(){
   return off_slot;
 }
 
-int two_pc_round_begin(const uint16_t round_number, const uint8_t app_id, uint32_t* two_pc_value, uint8_t* phase, uint8_t** final_flags)
+int two_pc_round_begin(const uint16_t round_number, const uint8_t app_id, uint32_t* two_pc_value, uint8_t* phase, uint8_t** final_error_codes, uint8_t** final_flags)
 {
   tx = 0;
   did_tx = 0;
@@ -321,6 +335,7 @@ int two_pc_round_begin(const uint16_t round_number, const uint8_t app_id, uint32
   chaos_round(round_number, app_id, (const uint8_t const*)&two_pc_local, sizeof(two_pc_local.two_pc) + two_pc_get_flags_length() + two_pc_get_votes_length(), TWO_PC_SLOT_LEN_DCO, TWO_PC_ROUND_MAX_SLOTS, two_pc_get_flags_length(), process);
   memcpy(two_pc_local.two_pc.flags_and_votes,tx_flags_final, two_pc_get_flags_length() + two_pc_get_votes_length());
   *two_pc_value = two_pc_local.two_pc.value;
+  *final_error_codes = two_pc_local.two_pc.error_codes;
   *final_flags = two_pc_local.flags_and_votes;
   *phase = two_pc_local.two_pc.phase;
   return completion_slot;

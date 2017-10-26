@@ -45,7 +45,7 @@
 #include "chaos-config.h"
 #include "3pc.h" /* for phases enum */
 
-#define TWO_PC_LOG_FLAGS 0
+#define TWO_PC_LOG_FLAGS 1
 #define TWO_PC_SLOT_LEN          (4*(RTIMER_SECOND/1000)+3*(RTIMER_SECOND/1000)/4)    //1 rtimer tick == 2*31.52 us
 
 //force radio off after TWO_PC_ROUND_MAX_SLOTS slots
@@ -53,7 +53,7 @@
 
 #define TWO_PC_SLOT_LEN_DCO      (TWO_PC_SLOT_LEN*CLOCK_PHI)    //TODO needs calibration
 
-int two_pc_round_begin(const uint16_t round_number, const uint8_t app_id, uint32_t* two_pc_value, uint8_t* phase, uint8_t** final_flags);
+int two_pc_round_begin(const uint16_t round_number, const uint8_t app_id, uint32_t* two_pc_value, uint8_t* phase, uint8_t** final_error_codes, uint8_t** final_flags);
 
 int two_pc_is_pending(const uint16_t round_count);
 
