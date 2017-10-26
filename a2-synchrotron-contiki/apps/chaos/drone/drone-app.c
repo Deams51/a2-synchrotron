@@ -55,6 +55,7 @@
 static uint32_t two_pc_value = 0;
 static uint32_t two_pc_agreement_value = 0;
 static uint16_t round_count_local = 0;
+static uint8_t* error_codes;
 static uint8_t* flags;
 static uint8_t complete = 0, phase = 0;
 static uint16_t off_slot;
@@ -64,6 +65,7 @@ static uint8_t serial_buffer_idx = 0;
 
 static void round_begin(const uint16_t round_count, const uint8_t id);
 static void serial_rx_callback(unsigned char c);
+static void printBits(size_t const size, void const * const ptr);
 
 CHAOS_APP(chaos_drone_app, TWO_PC_SLOT_LEN, TWO_PC_ROUND_MAX_SLOTS, 1, two_pc_is_pending, round_begin);
 #if NETSTACK_CONF_WITH_CHAOS_NODE_DYNAMIC
@@ -120,17 +122,25 @@ PROCESS_THREAD(chaos_drone_app_process, ev, data)
 
       printf("{rd %u res} 2pc: %08lx, fin: %u/%u, ph: %i, node id: %u, n: %u\n", round_count_local, two_pc_value, complete, off_slot, phase, node_id, chaos_node_count);
       printf("{rd %u phase} %s, fin: %u\n", round_count_local, PHASE_TO_STR(final_phase), complete);
-#if TWO_PC_LOG_FLAGS
+      printf("{rd %u error_codes} ", round_count_local);
       int i;
+      for( i=0; i<10; i++ ){
+        printf(" %u", error_codes[i]);
+      }
+      printf("\n");
+
+#if TWO_PC_LOG_FLAGS
       printf("{rd %u fl}", round_count_local);
       for( i=0; i<two_pc_get_flags_length(); i++ ){
         printf(" %02x", flags[i]);
       }
       printf("\n");
+
       printf("{rd %u votes}", round_count_local);
       flags += two_pc_get_flags_length();
       for( i=0; i<two_pc_get_flags_length(); i++ ){
-        printf(" %02x", flags[i]);
+        printf(" ");
+        printBits(sizeof(flags[i]), &flags[i]);
       }
       printf("\n");
 #endif
@@ -143,7 +153,8 @@ PROCESS_THREAD(chaos_drone_app_process, ev, data)
 
 static void round_begin(const uint16_t round_count, const uint8_t id){
   two_pc_value = two_pc_agreement_value;
-  complete = two_pc_round_begin(round_count, id, &two_pc_value, &phase, &flags);
+
+  complete = two_pc_round_begin(round_count, id, &two_pc_value, &phase, &error_codes, &flags);
   off_slot = two_pc_get_off_slot();
   round_count_local = round_count;
   process_poll(&chaos_drone_app_process);
@@ -160,5 +171,22 @@ static void serial_rx_callback(unsigned char c){
   } else {
     serial_buffer[serial_buffer_idx] = c;
     serial_buffer_idx++;
+  }
+}
+
+// assumes little endian
+static void printBits(size_t const size, void const * const ptr)
+{
+  const unsigned char *b = (unsigned char*) ptr;
+  unsigned char byte;
+  int i, j;
+
+  for (i=size-1;i>=0;i--)
+  {
+    for (j=7;j>=0;j--)
+    {
+      byte = (b[i] >> j) & 1;
+      printf("%u", byte);
+    }
   }
 }
