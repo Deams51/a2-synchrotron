@@ -48,7 +48,7 @@ typedef struct chaos_app{
   char* name;
   uint16_t slot_length;
   uint16_t max_slots;
-	uint8_t requires_node_index;
+  uint8_t requires_node_index;
   uint32_t round_interval;
   int (*is_pending)(const uint16_t round_count);
   void (*round_begin)(const uint16_t round_count, const uint8_t id);
